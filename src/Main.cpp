@@ -23,39 +23,43 @@ static Symbol32 pureVirtualSymbol(std::numeric_limits<uint32_t>::max(), "pure_vi
 
 bool getVTablesContent(ELFIO::elfio& reader, std::vector<VTable>& vtables, std::vector<Symbol32>& symbols) {
     using namespace ELFIO;
-    const auto& section = reader.sections[8];
-    if (section == nullptr) {
-        return false;
-    }
+    bool ret = false;
+    for(int i=0; i<reader.sections.size(); i++) {
+        const auto& section = reader.sections[i];
+        if (reader.sections[i]->get_type() != SHT_REL && reader.sections[i]->get_type() != SHT_RELA) {
+            continue;
+        }
+        ret = true;
 
-    relocation_section_accessor accessor(reader, section);
-    for (Elf_Xword entry = 0; entry < accessor.get_entries_num(); ++entry) {
-        Elf64_Addr offset = 0;
-        Elf_Word symbolOffset = 0;
-        Elf_Word type;
-        Elf_Sxword addend;
-        if (accessor.get_entry(entry, offset, symbolOffset, type, addend)) {
-            for (auto& table : vtables) {
-                if (offset >= table.baseOffset && offset <= table.maxOffset) {
-                    bool found = false;
-                    for (auto& symbol : symbols) {
-                        if (symbolOffset == symbol.index) {
-                            table.content[offset] = (&symbol);
-                            found = true;
-                            break;
+        relocation_section_accessor accessor(reader, section);
+        for (Elf_Xword entry = 0; entry < accessor.get_entries_num(); ++entry) {
+            Elf64_Addr offset = 0;
+            Elf_Word symbolOffset = 0;
+            Elf_Word type;
+            Elf_Sxword addend;
+            if (accessor.get_entry(entry, offset, symbolOffset, type, addend)) {
+                for (auto& table : vtables) {
+                    if (offset >= table.baseOffset && offset <= table.maxOffset) {
+                        bool found = false;
+                        for (auto& symbol : symbols) {
+                            if (symbolOffset == symbol.index) {
+                                table.content[offset] = (&symbol);
+                                found = true;
+                                break;
+                            }
                         }
-                    }
 
-                    // if the symbol wasn't found in the list, probably is `__cxa_pure_virtual`
-                    if (!found) {
-                        table.content[offset] = &pureVirtualSymbol;
+                        // if the symbol wasn't found in the list, probably is `__cxa_pure_virtual`
+                        if (!found) {
+                            table.content[offset] = &pureVirtualSymbol;
+                        }
                     }
                 }
             }
         }
     }
 
-    return true;
+    return ret;
 }
 
 std::vector<Symbol32> getSymbols(const ELFIO::endianess_convertor& convertor, const ELFIO::section& section,
