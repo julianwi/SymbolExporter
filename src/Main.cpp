@@ -118,6 +118,62 @@ std::vector<Symbol32> getSymbols(const ELFIO::endianess_convertor& convertor, co
     return std::move(entries);
 }
 
+void findSuperClasses() {
+    std::map<std::string, VTable*> vtables_by_name;
+    for (VTable& vtab : vtables)
+        vtables_by_name[vtab.name] = &vtab;
+
+    std::string classname;
+    int i, stack=0;
+    for (VTable& vtab : vtables)
+    {
+        for (const auto& it : vtab.content) {
+            if(!strncmp(it.second->demangled, "non-virtual thunk", 17))
+                continue;
+            for(i=0; it.second->demangled[i]; i++){
+                if(it.second->demangled[i]=='<')
+                    stack++;
+                if(it.second->demangled[i]=='>')
+                    stack--;
+                if(it.second->demangled[i] == '(' && !stack)
+                    break;
+            }
+            if(!it.second->demangled[i])
+                continue;
+            for(i--; i; i--){
+                if(it.second->demangled[i]=='>')
+                    stack++;
+                if(it.second->demangled[i]=='<')
+                    stack--;
+                if(it.second->demangled[i] == ':' && it.second->demangled[i+1] == ':' && !stack)
+                    break;
+            }
+            if(!i)
+                continue;
+            classname = std::string(it.second->demangled, i);
+            if(classname != vtab.name)
+                vtab.superClasses[classname] = vtables_by_name[classname];
+        }
+    }
+
+    //removing all indirect super classes from the map
+    std::map<std::string, VTable*> superclsmap;
+    VTable* superVTable;
+    for (VTable& vtab : vtables) {
+        superclsmap = vtab.superClasses;
+        for (const auto& it : superclsmap) {
+            if((superVTable = vtables_by_name[it.first]))
+                for (const auto& it2 : vtables_by_name[it.first]->superClasses)
+                    superclsmap.erase(it2.first);
+        }
+        for (const auto& it : superclsmap) {
+            if(!vtab.superClass.empty())
+                vtab.superClass += ", ";
+            vtab.superClass += "public " + it.first;
+        }
+    }
+}
+
 int main(int argc, const char** argv) {
     optparse::OptionParser parser = optparse::OptionParser().description("SymbolExporter v1.0");
 
@@ -225,6 +281,8 @@ int main(int argc, const char** argv) {
 
     Classyfier converter(symbols);
     std::cout << converter.parse() << " types have been skipped\n";
+
+    findSuperClasses();
 
     std::cout << "Linking VTables\n";
     for (auto& table : vtables) {

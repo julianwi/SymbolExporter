@@ -49,7 +49,10 @@ std::ostream& operator<<(std::ostream& stream, const Object& object) {
             break;
 
         case Object::Type::CLASS: {
-            stream << "class " << object.name << " {\n\npublic:\n";
+            stream << "class " << object.name;
+            if(object.vtable && !object.vtable->superClass.empty())
+                stream << " : " << object.vtable->superClass;
+            stream << " {\n\npublic:\n";
             if (object.vtable) {
                 bool haveDestructor = false;
                 for (const auto& symbol : object.vtable->content) {

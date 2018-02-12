@@ -12,6 +12,8 @@ struct VTable {
     std::uint32_t baseOffset;
     std::uint32_t maxOffset;
     std::map<uint32_t, Symbol32*> content;
+    std::map<std::string, VTable*> superClasses;
+    std::string superClass;
 
     explicit VTable(Symbol32* symbol_);
 };
